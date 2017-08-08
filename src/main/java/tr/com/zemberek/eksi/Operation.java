@@ -14,6 +14,10 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.Scanner;
 
+import zemberek.morphology.ambiguity.Z3MarkovModelDisambiguator;
+import zemberek.morphology.analysis.SentenceAnalysis;
+import zemberek.morphology.analysis.tr.TurkishMorphology;
+import zemberek.morphology.analysis.tr.TurkishSentenceAnalyzer;
 import zemberek.tokenization.TurkishSentenceExtractor;
 
 /**
@@ -80,7 +84,8 @@ public class Operation
     		//Cümlelerine ayır.
     		newSentenceBySentenceList = splitToSentenceTheParagraph(paragraph, newSentenceBySentenceList, totalCount);
             totalCount = Collections.max(newSentenceBySentenceList.entrySet(), Map.Entry.comparingByValue()).getKey();
-            
+            Map<Integer, String> removedProperNouns = new HashMap<>();
+            removedProperNouns = removeProperNounsFromSentences(newSentenceBySentenceList);
     	}
     	return null;
     }
@@ -104,5 +109,29 @@ public class Operation
         }
         System.out.println("Paragraf cümlelerine ayrıldı!");
         return newSentenceBySentenceList;
+    }
+    
+    private static Map<Integer, String> removeProperNounsFromSentences(Map<Integer,String> newSentenceBySentenceList) {
+    	TurkishMorphology morphology = null;
+		try {
+			morphology = TurkishMorphology.createWithDefaults();
+		} catch (Exception e) {
+			System.err.println("Kritik bir hata oluştu");
+		}
+        Z3MarkovModelDisambiguator disambiguator = null;
+		try {
+			disambiguator = new Z3MarkovModelDisambiguator();
+		} catch (Exception e) {
+			System.err.println("Kritik bir hata oluştu");;
+		}
+        TurkishSentenceAnalyzer sentenceAnalyzer = new TurkishSentenceAnalyzer(
+                morphology,
+                disambiguator
+        );
+        Map<Integer, String> removedProperNouns = new HashMap<Integer, String>();
+		for (Map.Entry<Integer, String> entry : newSentenceBySentenceList.entrySet()) {
+			removedProperNouns = new DisambiguateSentences(sentenceAnalyzer).analyzeSentenceAndRemoveProperNouns(removedProperNouns, entry.getValue(), entry.getKey());
+		}
+		return removedProperNouns;
     }
 }
