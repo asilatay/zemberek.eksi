@@ -3,19 +3,18 @@ package tr.com.zemberek.eksi;
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import zemberek.morphology.ambiguity.Z3MarkovModelDisambiguator;
-import zemberek.morphology.analysis.SentenceAnalysis;
 import zemberek.morphology.analysis.tr.TurkishMorphology;
 import zemberek.morphology.analysis.tr.TurkishSentenceAnalyzer;
 import zemberek.tokenization.TurkishSentenceExtractor;
@@ -78,14 +77,14 @@ public class Operation
     }
     
     private static List<String> allOperationMethod(List<String> entryParagraph) {
-    	Map<Integer,String> newSentenceBySentenceList = new HashMap<>();
-    	int totalCount = 0;
     	for (String paragraph : entryParagraph) {
+    		Map<Integer,String> newSentenceBySentenceList = new HashMap<>();
+    		int totalCount = 0;
     		//Cümlelerine ayır.
     		newSentenceBySentenceList = splitToSentenceTheParagraph(paragraph, newSentenceBySentenceList, totalCount);
-            totalCount = Collections.max(newSentenceBySentenceList.entrySet(), Map.Entry.comparingByValue()).getKey();
             Map<Integer, String> removedProperNouns = new HashMap<>();
             removedProperNouns = removeProperNounsFromSentences(newSentenceBySentenceList);
+            readFileAndWriteOnThis(removedProperNouns);
     	}
     	return null;
     }
@@ -133,5 +132,24 @@ public class Operation
 			removedProperNouns = new DisambiguateSentences(sentenceAnalyzer).analyzeSentenceAndRemoveProperNouns(removedProperNouns, entry.getValue(), entry.getKey());
 		}
 		return removedProperNouns;
+    }
+    
+    private static void readFileAndWriteOnThis(Map<Integer, String> removedProperNouns) {
+    	Map<Integer, String> sortedMapByKey = new HashMap<Integer, String>();
+    	SortedSet<Integer> keys = new TreeSet<Integer>(removedProperNouns.keySet());
+    	for (Integer key : keys) {
+    		sortedMapByKey.put(key, removedProperNouns.get(key));
+    	}
+    	try {
+    		FileWriter fw = new FileWriter("removedSentences.txt",true); //the true will append the new data
+			for (Map.Entry<Integer, String> e : sortedMapByKey.entrySet()) {
+				fw.write(e.getValue());//appends the string to the file
+			}
+			fw.close();
+			System.out.println("TXT oluşturuldu.!");
+		} catch (IOException e) {
+			System.err.println("TXT oluşturulurken hata oluştu!");
+			e.printStackTrace();
+		}
     }
 }

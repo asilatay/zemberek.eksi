@@ -17,9 +17,7 @@ public class DisambiguateSentences {
     Map<Integer, String> analyzeSentenceAndRemoveProperNouns(Map<Integer, String> removedProperNouns ,String sentence, Integer keyNumber) {
         System.out.println("Sentence  = " + sentence);
         SentenceAnalysis result = sentenceAnalyzer.analyze(sentence);
-        
         removedProperNouns = analyzing(removedProperNouns, result, keyNumber);
-        
         return removedProperNouns;
     }
 
@@ -36,7 +34,7 @@ public class DisambiguateSentences {
                 }
             }
             if (!foundProperNoun) {
-            	fullSentence += entry + " ";
+            	fullSentence += entry.input+ " ";
             }
         }
         removedProperNouns.put(keyNumber, fullSentence);
