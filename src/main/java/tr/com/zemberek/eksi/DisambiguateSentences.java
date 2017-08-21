@@ -4,6 +4,8 @@ import zemberek.morphology.analysis.SentenceAnalysis;
 import zemberek.morphology.analysis.WordAnalysis;
 import zemberek.morphology.analysis.tr.TurkishSentenceAnalyzer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class DisambiguateSentences {
@@ -13,31 +15,39 @@ public class DisambiguateSentences {
     public DisambiguateSentences(TurkishSentenceAnalyzer sentenceAnalyzer) {
         this.sentenceAnalyzer = sentenceAnalyzer;
     }
-
-    Map<Integer, String> analyzeSentenceAndRemoveProperNouns(Map<Integer, String> removedProperNouns ,String sentence, Integer keyNumber) {
-        System.out.println("Sentence  = " + sentence);
-        SentenceAnalysis result = sentenceAnalyzer.analyze(sentence);
-        removedProperNouns = analyzing(removedProperNouns, result, keyNumber);
-        return removedProperNouns;
+    
+    public DisambiguateSentences() {
+    	
     }
 
-    private Map<Integer, String> analyzing(Map<Integer, String> removedProperNouns, SentenceAnalysis sentenceAnalysis, Integer keyNumber) {
+    Map<Integer, String> analyzeSentenceAndOperationPOSTagging(Map<Integer, String> sentenceSequenceSentenceMap ,String sentence, Integer keyNumber) {
+        System.out.println("Sentence  = " + sentence);
+        SentenceAnalysis result = sentenceAnalyzer.analyze(sentence);
+        sentenceSequenceSentenceMap = posTagging(sentenceSequenceSentenceMap, result, keyNumber);
+        return sentenceSequenceSentenceMap;
+    }
+    
+    public List<String> getWordsFromSentence(String sentence) {
+    	SentenceAnalysis sentenceAnalysis = sentenceAnalyzer.analyze(sentence);
+    	List<String> words = new ArrayList<String>();
+    	for (SentenceAnalysis.Entry entry : sentenceAnalysis) {
+    		words.add(entry.input);
+    	}
+    	return words;
+    }
+
+    private Map<Integer, String> posTagging(Map<Integer, String> sentenceSequenceSentenceMap
+    		, SentenceAnalysis sentenceAnalysis, Integer keyNumber) {
     	String fullSentence = "";
         for (SentenceAnalysis.Entry entry : sentenceAnalysis) {
             System.out.println("Word = " + entry.input);
-            boolean foundProperNoun = false;
             for (WordAnalysis analysis : entry.parses) {
                 System.out.println(analysis.formatLong());
-                if (analysis.formatLong().contains("Prop")) {
-                	foundProperNoun = true;
-                	break;
-                }
-            }
-            if (!foundProperNoun) {
-            	fullSentence += entry.input+ " ";
+                fullSentence += entry.input+ "[" +analysis.getDictionaryItem().primaryPos.getStringForm() +"] ";
+                break;//Kelimeleri tag lerken ilk tahmini al
             }
         }
-        removedProperNouns.put(keyNumber, fullSentence);
-        return removedProperNouns;
+        sentenceSequenceSentenceMap.put(keyNumber, fullSentence);
+        return sentenceSequenceSentenceMap;
     }
 }
