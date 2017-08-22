@@ -185,22 +185,46 @@ public class Operation
     
     private static Map<Integer, String> checkAndFixWords(Map<Integer, String> newSentenceBySentenceList) {
     	SpellChecker sc = new SpellChecker();
-    	DisambiguateSentences disAmb = new DisambiguateSentences();
+    	TurkishMorphology morphology = null;
+		try {
+			morphology = TurkishMorphology.createWithDefaults();
+		} catch (Exception e) {
+			System.err.println("Kritik bir hata oluştu");
+		}
+        Z3MarkovModelDisambiguator disambiguator = null;
+		try {
+			disambiguator = new Z3MarkovModelDisambiguator();
+		} catch (Exception e) {
+			System.err.println("Kritik bir hata oluştu");;
+		}
+        TurkishSentenceAnalyzer sentenceAnalyzer = new TurkishSentenceAnalyzer(
+                morphology,
+                disambiguator
+        );
+    	DisambiguateSentences disAmb = new DisambiguateSentences(sentenceAnalyzer);
     	TurkishSpellChecker spellChecker = callSpellCheckerLibraries();
     	for (Map.Entry<Integer, String> entry : newSentenceBySentenceList.entrySet()) {
     		String sentence = entry.getValue();
     		String checkedSentence = "";
     		List<String> wordsForOneSentence = disAmb.getWordsFromSentence(sentence);
-    		for (String word : wordsForOneSentence) {
-    			List<String> suggestions = sc.suggestionsForWord(word, spellChecker);
-    			if (suggestions != null) {
-    				//önerileri değerlendir
-    				
-    			} else {
-    				checkedSentence += word;
+    		if (wordsForOneSentence != null) {    			
+    			for (String word : wordsForOneSentence) {
+    				List<String> suggestions = sc.suggestionsForWord(word, spellChecker);
+    				if (suggestions != null) {
+    					//önerileri değerlendir
+    					for (String suggestion : suggestions) {
+    						checkedSentence += suggestion +" ";
+    						break;
+    					}
+    					
+    				} else {
+    					checkedSentence += word + " ";
+    				}
     			}
     		}
-    		newSentenceBySentenceList.put(entry.getKey(), checkedSentence);
+    		if (!checkedSentence.equals("")) {    			
+    			newSentenceBySentenceList.put(entry.getKey(), checkedSentence);
+    		}
     	}
     	return newSentenceBySentenceList;
     }
