@@ -20,7 +20,7 @@ public class DisambiguateSentences {
 	Map<Integer, String> analyzeSentenceAndOperationPOSTagging(Map<Integer, String> sentenceSequenceSentenceMap ,String sentence, Integer keyNumber) {
         System.out.println("Sentence  = " + sentence);
         SentenceAnalysis result = sentenceAnalyzer.analyze(sentence);
-        sentenceSequenceSentenceMap = posTagging(sentenceSequenceSentenceMap, result, keyNumber);
+        sentenceSequenceSentenceMap = getRootOfWords(sentenceSequenceSentenceMap, result, keyNumber);
         return sentenceSequenceSentenceMap;
     }
     
@@ -36,15 +36,22 @@ public class DisambiguateSentences {
     	return null;
     }
 
-    private Map<Integer, String> posTagging(Map<Integer, String> sentenceSequenceSentenceMap
+    private Map<Integer, String> getRootOfWords(Map<Integer, String> sentenceSequenceSentenceMap
     		, SentenceAnalysis sentenceAnalysis, Integer keyNumber) {
     	String fullSentence = "";
         for (SentenceAnalysis.Entry entry : sentenceAnalysis) {
             System.out.println("Word = " + entry.input);
             for (WordAnalysis analysis : entry.parses) {
-                System.out.println(analysis.formatLong());
-                fullSentence += entry.input+ "[" +analysis.getDictionaryItem().primaryPos.getStringForm() +"] ";
-                break;//Kelimeleri tag lerken ilk tahmini al
+                System.out.println("Root = " + analysis.root);
+                //Noktalama işaretlerini alma
+                if (analysis.getDictionaryItem().getId().equals("._Punc")) {
+                	break;
+                }
+                
+                //Her kelimenin root unu al
+                fullSentence += analysis.root + " ";
+                
+                break;
             }
         }
         sentenceSequenceSentenceMap.put(keyNumber, fullSentence);
