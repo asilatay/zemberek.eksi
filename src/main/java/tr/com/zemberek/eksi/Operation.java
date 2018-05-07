@@ -1,6 +1,8 @@
 package tr.com.zemberek.eksi;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
@@ -10,6 +12,10 @@ import java.io.UnsupportedEncodingException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,7 +37,8 @@ import zemberek.tokenization.TurkishSentenceExtractor;
  */
 public class Operation 
 {
-	private static final String taggedSentencesFileName = "taggedSentences.txt";
+	
+	private static final String tmpFilePath = "D:\\YL_DATA\\tmpUsers\\";
 	
 	/**
 	 * Başlıklarına göre gruplanmış dosyaların olduğu dizin
@@ -59,6 +66,11 @@ public class Operation
 	 */
 	private static final String stopWordsPath = "D:\\Yüksek Lisans\\Tez\\ZEMBEREK\\stopwords-tr.txt";
 	
+	/**
+	 * Tek kalmış harfleri temizlemek için kullanılan dosyanın path dir
+	 */
+	private static final String lettersPath = "D:\\Yüksek Lisans\\Tez\\ZEMBEREK\\letters.txt";
+	
     public static void main( String[] args ) throws UnsupportedEncodingException
     {
     	String operationSelect = "-1";
@@ -66,35 +78,13 @@ public class Operation
     	List<String> allInMemory = new ArrayList<String>();
         do {
         	System.out.println("Çık      -> Press 0");
-        	System.out.println("Txt oku ve Memory Al -> Press 1");
-        	System.out.println("Ayıklama Operasyonuna Başla -> Press 2");
-        	System.out.println("Başlık dosyalarını oku ve düzelt -> Press 3");
+        	System.out.println("Ayıklama Operasyonuna Başla -> Press 1");
+        	System.out.println("Başlık dosyalarını oku ve düzelt -> Press 2");
         	
         	operationSelect = scanIn.nextLine();
         	if (operationSelect.equals("1")) {
         		allInMemory = readTxtToMemory("eksi.txt");
         	} else if (operationSelect.equals("2")) {
-        		if (allInMemory.size() > 0) {
-        			TurkishMorphology morphology = null;
-        			try {
-        				morphology = TurkishMorphology.createWithDefaults();
-        			} catch (Exception e) {
-        				System.err.println("Kritik bir hata oluştu");
-        			}
-        	        Z3MarkovModelDisambiguator disambiguator = null;
-        			try {
-        				disambiguator = new Z3MarkovModelDisambiguator();
-        			} catch (Exception e) {
-        				System.err.println("Kritik bir hata oluştu");;
-        			}
-        			
-        			List<String> stopWords = readTxtToMemory(stopWordsPath);
-        			
-        			allOperationMethod(allInMemory, "test.txt", morphology, disambiguator, stopWords);
-        		} else {
-        			System.err.println("Önce veri okumalısın");
-        		}
-        	} else if (operationSelect.equals("3")) {
         		readTitleFilesAndProcess();
         	}
         } while(!operationSelect.equals("0"));
@@ -102,11 +92,13 @@ public class Operation
         scanIn.close();
     }
     
-    private static void readTitleFilesAndProcess() throws UnsupportedEncodingException {
+    
+
+	private static void readTitleFilesAndProcess() throws UnsupportedEncodingException {
 		// Directory içinde ne kadar dosya varsa bunların path ini bir listeye doldurur
 		List<Path> filesInDirectory = new ArrayList<Path>();
 		
-		try (Stream<Path> paths = Files.walk(Paths.get(titlePathFiles))) 
+		try (Stream<Path> paths = Files.walk(Paths.get(userPathFiles))) 
 		{
 			paths.filter(Files::isRegularFile).forEach(filesInDirectory::add);
 			
@@ -131,25 +123,89 @@ public class Operation
 			System.err.println("Kritik bir hata oluştu");;
 		}
 		
-		List<String> stopWords = readTxtToMemory(stopWordsPath);
+		List<String> stopWords = readTxtToMemoryNotEncoding(stopWordsPath);
+		
+		List<String> letters = readTxtToMemoryNotEncoding(lettersPath);
+		
+		Map<String, String> wrongCorrectWordMap = getWrongCorrectWordMap();
 		
 		int logCount = 0;
 		for (Path p : filesInDirectory) {
 			List<String> entryList = readTxtToMemory(p.toString());
 			
-			String newFileName = p.toString().substring(18, p.toString().length());
+			String newFileName = p.getFileName().toString();
 			
-			allOperationMethod(entryList, newFileName, morphology, disambiguator, stopWords);
+			allOperationMethod(entryList, newFileName, morphology, disambiguator, stopWords, wrongCorrectWordMap, letters);
 			
 			logCount++;
 			
 			if (logCount % 20 == 0) {
 				System.out.println("Toplam Dosya Sayısı -> " + fileCount + "---- Kalan Dosya Sayısı -> " + (fileCount - logCount));
 			}
+			
+			moveToAnotherDirectory(p.toString(), tmpFilePath);
 		}
     }
     
-    /**
+    private static Map<String, String> getWrongCorrectWordMap() {
+    	try {
+    		String connectionIP ="jdbc:mysql://localhost/eksi";
+    		String username ="root";
+    		String pass = "pass";
+    		String db = connectionIP;
+    		String myDriver = "com.mysql.jdbc.Driver";
+    		
+			String tableName = "wrong_vocabs";
+			Class.forName(myDriver);
+			Connection conn = DriverManager.getConnection(db, username, pass);
+	        
+			String query = "SELECT * FROM " +tableName;
+			
+			Statement st = conn.createStatement();        
+			ResultSet rs = st.executeQuery(query);
+			
+			Map<String, String> map = new HashMap<String, String>();
+			
+			while (rs.next()) {
+				String origin = rs.getString("origin");
+				String correctly = rs.getString("correctly");
+				
+				if (! map.containsKey(origin)) {
+					map.put(origin, correctly);
+				}
+
+			}
+			st.close();
+			conn.close();
+			return map;
+			
+		} catch (Exception e) {
+			System.err.println("Database Connection Error ! WRONG VOCABS TABLE");
+	        System.err.println(e.getMessage()); 
+	        return null;
+		}
+	}
+
+
+
+	private static void moveToAnotherDirectory(String filePath, String tmpFilePath) {
+    	try{
+    		
+     	   File afile =new File(filePath);
+     		
+     	   if(afile.renameTo(new File(tmpFilePath + afile.getName()))){
+     		System.out.println("Dosya başka bir dizine taşındı!");
+     	   }else{
+     		System.out.println("Taşıma HATASI!");
+     	   }
+     	    
+     	}catch(Exception e){
+     		e.printStackTrace();
+     	}
+		
+	}
+
+	/**
      * Bu metod EksiSozluk projesinden çıkan input u okur ve
      * memory e kaydeder.
      * @return String listesi(Paragraflar)
@@ -186,6 +242,37 @@ public class Operation
     	return allInMemory;
     }
     
+    
+    private static List<String> readTxtToMemoryNotEncoding(String path) throws UnsupportedEncodingException {
+    	BufferedReader in = null;
+		try {
+			in = new BufferedReader(new InputStreamReader(new FileInputStream(path)));
+		} catch (FileNotFoundException e1) {
+			System.err.println("Dosya okunurken hata oluştu.");
+		}
+    	String line;
+    	
+    	List<String> allInMemory = new ArrayList<String>();
+    	
+    	try {
+			while((line = in.readLine()) != null) {
+				
+				allInMemory.add(line);
+				
+			}
+		} catch (IOException e) {
+			System.err.println("Txt okurken hata oluştu");
+		}
+    	try {
+			in.close();
+		} catch (IOException e) {
+			System.err.println("Dosya kapatılırken hata oluştu");
+		}
+    	System.out.println("Memory e alım başarılı ! ");
+    	
+    	return allInMemory;
+    }
+    
     /**
      * 
      * @param entryParagraph : Paragraflar
@@ -195,8 +282,13 @@ public class Operation
      * - Kelimeleri TXT ye yazdır.
      * @return
      */
-    private static void allOperationMethod(List<String> entryParagraph, String newFileName, TurkishMorphology morphology, Z3MarkovModelDisambiguator disambiguator, List<String> stopWords) {
+    private static void allOperationMethod(List<String> entryParagraph, String newFileName, TurkishMorphology morphology, Z3MarkovModelDisambiguator disambiguator
+    		, List<String> stopWords, Map<String, String> wrongCorrectWordMap, List<String> letters) {
+    	System.out.println("YENİ DOSYA ADI : " + newFileName);
     	for (String paragraph : entryParagraph) {
+    		//Yanlış türkçe harf içeren kelimeleri düzeltir
+    		paragraph = correctVocabs(paragraph, wrongCorrectWordMap);
+    		
     		Map<Integer,String> newSentenceBySentenceList = new HashMap<>();
     		//Cümlelerine ayır.
     		newSentenceBySentenceList = splitToSentenceTheParagraph(paragraph, newSentenceBySentenceList);
@@ -209,13 +301,85 @@ public class Operation
             //Yanlış kelimeleri düzelt.
             sentenceSequenceSentenceMap = checkAndFixWords(newSentenceBySentenceList, morphology, disambiguator);
             //POSTagging
-            sentenceSequenceSentenceMap = tagVocabs(sentenceSequenceSentenceMap);
+            sentenceSequenceSentenceMap = tagVocabs(sentenceSequenceSentenceMap, morphology, disambiguator);
+            //Tek kalmış harfleri sil
+            sentenceSequenceSentenceMap = removeLetters(newSentenceBySentenceList, morphology, disambiguator, letters);
             //Çıktı oluştur
             readFileAndWriteOnThis(sentenceSequenceSentenceMap, newFileName);
     	}
     }
     
-    private static Map<Integer, String> removeStopWords(Map<Integer, String> newSentenceBySentenceList,
+
+	private static String correctVocabs(String paragraph, Map<String, String> wrongCorrectWordMap) {
+    	String newParagraph = "";
+    	String[] arr = paragraph.split(" ");
+
+		for (String word : arr) {
+			if (word.contains("?")) {
+				if (word.contains(".")) {
+					word = word.replace(".", "");
+				}
+				if (word.contains("!")) {
+					word = word.replace("!", "");
+				}
+				if (word.contains(",")) {
+					word = word.replace(",", "");
+				}
+				if (word.contains("(")) {
+					word = word.replace("(", "");
+				}
+				if (word.contains(")")) {
+					word = word.replace(")", "");
+				}
+				if (word.contains("...")) {
+					word = word.replace("...", "");
+				}
+				if (word.contains(";")) {
+					word = word.replace(";", "");
+				}
+				if (word.contains("*")) {
+					word = word.replace("*", "");
+				}
+				if (word.contains(":")) {
+					word = word.replace(":", "");
+				}
+				if (word.contains("-")) {
+					word = word.replace("-", "");
+				}
+				if (word.contains("+")) {
+					word = word.replace("+", "");
+				}
+				if (word.contains("@")) {
+					word = word.replace("@", "at");
+				}
+				if (word.contains("http")) {
+					continue;
+				}
+				word = word.trim();
+				
+				if (wrongCorrectWordMap.containsKey(word)) {
+					word = wrongCorrectWordMap.get(word);
+				} else {
+					for (int i = 1; i < word.length(); i++) {
+						String tmpWord = word.substring(0, i);
+						if (wrongCorrectWordMap.containsKey(tmpWord)) {
+							word = word.replace(tmpWord, wrongCorrectWordMap.get(tmpWord));
+						}
+					}
+				}
+				
+				newParagraph += word + " "; 
+			} else {
+				newParagraph += word + " ";
+			}
+		}
+		
+		return newParagraph;
+	}
+
+
+
+	private static Map<Integer, String> removeStopWords(Map<Integer, String> newSentenceBySentenceList,
 			TurkishMorphology morphology, Z3MarkovModelDisambiguator disambiguator, List<String> stopWords) {
     	TurkishSentenceAnalyzer sentenceAnalyzer = new TurkishSentenceAnalyzer(
                 morphology,
@@ -247,6 +411,40 @@ public class Operation
     	
     	return newSentenceBySentenceList;
 	}
+	
+	private static Map<Integer, String> removeLetters(Map<Integer, String> newSentenceBySentenceList,
+			TurkishMorphology morphology, Z3MarkovModelDisambiguator disambiguator, List<String> letters) {
+		TurkishSentenceAnalyzer sentenceAnalyzer = new TurkishSentenceAnalyzer(morphology, disambiguator);
+
+		DisambiguateSentences disAmb = new DisambiguateSentences(sentenceAnalyzer);
+		
+		System.out.println("Harfleri silme işlemi başlıyor");
+		
+		int totalFoundLetters = 0;
+		
+		for (Map.Entry<Integer, String> entry : newSentenceBySentenceList.entrySet()) {
+    		List<String> wordsForOneSentence = disAmb.getWordsFromSentence(entry.getValue());
+    		String checkedSentence = "";
+    		for (String word : wordsForOneSentence) {
+    			boolean isLetter = letters.stream().filter(a -> a.equalsIgnoreCase(word)).findFirst().isPresent();
+    			if (! isLetter) {
+    				checkedSentence += word + " ";
+    			} else {
+    				totalFoundLetters++;
+    			}
+    		}
+    		
+    		if (!checkedSentence.equals("")) {    			
+    			newSentenceBySentenceList.put(entry.getKey(), checkedSentence);
+    		}
+    	}
+    	
+    	System.out.println("Yeni dosya için harf bulma işlemi bitti. Toplam bulunan harf sayısı -> " + totalFoundLetters);
+    	
+    	return newSentenceBySentenceList;
+
+	}
+
 
 	private static Map<Integer, String> correctEncoding(Map<Integer, String> newSentenceBySentenceList, TurkishMorphology morphology, Z3MarkovModelDisambiguator disambiguator) {
     	
@@ -268,6 +466,9 @@ public class Operation
     			}
     			if (word.contains("ð")) {
     				word = word.replace("ð", "ğ");
+    			}
+    			if (word.contains("@")) {
+    				word = word.replace("@", "at");
     			}
     			
     			checkedSentence += word + " ";
@@ -291,7 +492,6 @@ public class Operation
      */
     private static Map<Integer, String> splitToSentenceTheParagraph(String paragraph, Map<Integer,String> newSentenceBySentenceList) {
     	int totalCount = 0;
-    	
     	System.out.println("Paragraph = " + paragraph);
         TurkishSentenceExtractor extractor = TurkishSentenceExtractor.DEFAULT;
         List<String> sentences = extractor.fromParagraph(paragraph);
@@ -310,19 +510,7 @@ public class Operation
      * operasyonu yapacak olan metodun çağrıldığı metoddur.
      * @return Cümle Sırası - Cümle Map i
      */
-    private static Map<Integer, String> tagVocabs(Map<Integer,String> newSentenceBySentenceList) {
-    	TurkishMorphology morphology = null;
-		try {
-			morphology = TurkishMorphology.createWithDefaults();
-		} catch (Exception e) {
-			System.err.println("Kritik bir hata oluştu");
-		}
-        Z3MarkovModelDisambiguator disambiguator = null;
-		try {
-			disambiguator = new Z3MarkovModelDisambiguator();
-		} catch (Exception e) {
-			System.err.println("Kritik bir hata oluştu");;
-		}
+    private static Map<Integer, String> tagVocabs(Map<Integer,String> newSentenceBySentenceList, TurkishMorphology morphology, Z3MarkovModelDisambiguator disambiguator) {
         TurkishSentenceAnalyzer sentenceAnalyzer = new TurkishSentenceAnalyzer(
                 morphology,
                 disambiguator
@@ -346,7 +534,7 @@ public class Operation
     		sortedMapByKey.put(key, sentenceSequenceSentenceMap.get(key));
     	}
     	try {
-    		FileWriter fw = new FileWriter(titlePathFilesAfterZemberek + newFileName, true); //the true will append the new data
+    		FileWriter fw = new FileWriter(userPathFilesAfterZemberek + newFileName, true); //the true will append the new data
 			for (Map.Entry<Integer, String> e : sortedMapByKey.entrySet()) {
 				fw.write(e.getValue());//appends the string to the file
 			}
